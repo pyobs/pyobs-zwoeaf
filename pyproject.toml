@@ -1,0 +1,33 @@
+[tool.poetry]
+name = "pyobs-zwoeaf"
+version = "1.0.0"
+description = "pyobs model for ZWO EAF focus motors"
+authors = ["Lennart Jonas Buhrke <l.buhrke@stud.uni-goettingen.de>", "Tim-Oliver Husser <thusser@uni-goettingen.de>"]
+license = "MIT"
+include = ['lib']
+
+[tool.poetry.build]
+script = "build.py"
+generate-setup-file = true
+
+[tool.poetry.dependencies]
+python = ">=3.10,<3.13"
+astropy = "^5.0"
+numpy = "^1.21"
+pybind11 = "^2.13"
+pyobs-core = "^1.0"
+
+[tool.poetry.dev-dependencies]
+black = "^21.12b0"
+
+[build-system]
+requires = [
+    "poetry-core>=1.1.0",
+    "setuptools>=65.4.1",
+    "pybind11>=2.13.0"
+]
+build-backend = "poetry.core.masonry.api"
+
+[tool.black]
+line-length = 120
+target-version = ['py311']
