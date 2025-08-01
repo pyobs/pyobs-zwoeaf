@@ -1,32 +1,29 @@
-[tool.poetry]
+[project]
 name = "pyobs-zwoeaf"
 version = "1.0.0"
 description = "pyobs model for ZWO EAF focus motors"
-authors = ["Lennart Jonas Buhrke <l.buhrke@stud.uni-goettingen.de>", "Tim-Oliver Husser <thusser@uni-goettingen.de>"]
+authors = [
+    { name = "Lennart Jonas Buhrke", email = "l.buhrke@stud.uni-goettingen.de" },
+    { name = "Tim-Oliver Husser", email = "thusser@uni-goettingen.de" },
+]
+requires-python = ">=3.11,<3.14"
 license = "MIT"
-include = ['lib']
+dependencies = [
+    "astropy>=7.0.1,<8",
+    "numpy>=2.2.5,<3",
+    "pyobs-core>=1,<2",
+]
 
-[tool.poetry.build]
-script = "build.py"
-generate-setup-file = true
-
-[tool.poetry.dependencies]
-python = ">=3.10,<3.13"
-astropy = "^5.0"
-numpy = "^1.21"
-pybind11 = "^2.13"
-pyobs-core = "^1.0"
-
-[tool.poetry.dev-dependencies]
-black = "^21.12b0"
+[dependency-groups]
+dev = [
+    "black>=23.7.0,<24",
+    "pre-commit>=3.3.3,<4",
+    "flake8>=7.3.0",
+]
 
 [build-system]
-requires = [
-    "poetry-core>=1.1.0",
-    "setuptools>=65.4.1",
-    "pybind11>=2.13.0"
-]
-build-backend = "poetry.core.masonry.api"
+requires = ["scikit-build-core>=0.11", "pybind11>=3.0"]
+build-backend = "scikit_build_core.build"
 
 [tool.black]
 line-length = 120

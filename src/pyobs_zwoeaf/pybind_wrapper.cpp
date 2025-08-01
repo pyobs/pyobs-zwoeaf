@@ -1,6 +1,6 @@
 #include <pybind11/pybind11.h>
 #include "stdio.h"
-#include "../lib/include/EAF_focuser.h"
+#include "EAF_focuser.h"
 #include <sys/time.h>
 #include <unistd.h>
 #include <string.h>
