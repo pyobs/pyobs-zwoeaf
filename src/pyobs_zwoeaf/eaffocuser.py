@@ -69,7 +69,7 @@ class EAFFocuser(IFocuser, Module, metaclass=ABCMeta):
         self.eaf = EAF(self.device_number, self.max_steps, self.backlash, self.direction, self.sound)
         success = self.eaf.Connect()
         if success is False:
-            sys.exit(
+            raise ValueError(
                 "EAF Focusing device failed to connect, exit program! Is the device connected vis USB? Permission for using the USB port? device_number available?"
             )
         self.connected = True
