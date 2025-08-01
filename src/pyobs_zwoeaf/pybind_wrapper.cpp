@@ -19,60 +19,55 @@ class EAF_WRAPPER
 		int max_steps;
 		int backlash;
 		bool direction;
-		bool b_sound;
+		bool sound;
 
 		// function variables
-		int EAF_count; 			// number of found devices
-		EAF_INFO EAFInfo; 		// EAF info structure
-		int iSelectedID; 		// selected device id
-		float f_temp; 			// temperature in fahrenheit?
-		int pose; 		        // motor pose
-		EAF_ERROR_CODE error; 	        // EAF error code error
-		bool b_moving; 			// boolean if motor moving
-		bool b_handcontrol; 	        // boolean if motor is moving by handcontrol -> does not exsist in our case ...
-		int step_range;                 // The maximal range of steps
+		int eaf_count; 			// number of found devices
+		EAF_INFO eaf_info; 		// EAF info structure
+		int selected_id; 		// selected device id
+		float temperature; 	    // temperature in fahrenheit?
+		int position; 		    // motor position
+		EAF_ERROR_CODE error; 	// EAF error code error
+		bool moving; 			// boolean if motor moving
+		bool handcontrol; 	    // boolean if motor is moving by handcontrol -> does not exsist in our case ...
+		int step_range;         // The maximal range of steps
 		bool capture; 			// capture useless returns
 
-		EAF_WRAPPER(int device_number, int max_steps, int backlash, bool direction, bool b_sound)
-		{
+		EAF_WRAPPER(int device_number, int max_steps, int backlash, bool direction, bool sound) {
 			this->device_number = device_number;
 			this->max_steps = max_steps;
 			this->backlash = backlash;
 			this->direction = direction;
-			this->b_sound = b_sound;
+			this->sound = sound;
 		}
 
-		bool EAFConnect()
-		{
-			EAF_count = EAFGetNum();
-			if(EAF_count <= 0 || EAF_count < device_number) // in case someone gives a device_number smaller than 1 ...
-			{
+		bool Connect() {
+		    // in case someone gives a device_number smaller than 1 ...
+			eaf_count = EAFGetNum();
+			if (eaf_count <= 0 || eaf_count < device_number) {
 				return false;
 			}
 
-			if(EAFGetID(device_number, &EAFInfo.ID) != EAF_SUCCESS) // get ID of the chosen device!
-			{
+            // get ID of the chosen device!
+			if (EAFGetID(device_number, &eaf_info.ID) != EAF_SUCCESS) {
 				return false;
 			}
-			EAFGetProperty(EAFInfo.ID, &EAFInfo);
-			iSelectedID = EAFInfo.ID;
+			EAFGetProperty(eaf_info.ID, &eaf_info);
+			selected_id = eaf_info.ID;
 
-			if(EAFOpen(iSelectedID) != EAF_SUCCESS)
-			{
+			if(EAFOpen(selected_id) != EAF_SUCCESS) {
 				return false; //printf("ERROR! Could not connect! Are you root?");
 			} else {
-				EAFSetMaximalStep();
-				EAFSetterBacklash();
-				EAFSetDirection();
-				EAFSetSound();
+				SetMaximalStep();
+				SetBacklash();
+				SetDirection();
+				SetSound();
 				return true; //printf("Connected to EAF Focuser! Ready to use!")
 			}
 		}
 
-		int EAFGetMaximalStep()
-		{
-			if(EAFGetMaxStep(iSelectedID, &max_steps) == EAF_SUCCESS)
-			{
+		int GetMaximalStep() {
+			if (EAFGetMaxStep(selected_id, &max_steps) == EAF_SUCCESS) {
 				return max_steps;
 			} else {
 				return -1;
@@ -80,146 +75,100 @@ class EAF_WRAPPER
 
 		}
 
-		void EAFSetMaximalStep()
-		{
-			EAFSetMaxStep(iSelectedID, max_steps);
+		void SetMaximalStep() {
+			EAFSetMaxStep(selected_id, max_steps);
 		}
 
-		bool EAFGetSound()
-		{
-			if(EAFGetBeep(iSelectedID, &b_sound) == EAF_SUCCESS)
-			{
-				return b_sound;
+		bool GetSound() {
+			if (EAFGetBeep(selected_id, &sound) == EAF_SUCCESS) {
+				return sound;
 			}
-				return false;
+            return false;
 		}
 
-		void EAFSetSound()
-		{
-			EAFSetBeep(iSelectedID, b_sound);
+		void SetSound() {
+			EAFSetBeep(selected_id, sound);
 		}
 
-		float EAFTemperature()
-		{
-			EAFGetTemp(iSelectedID, &f_temp);
-			return f_temp;
+		float Temperature() {
+			EAFGetTemp(selected_id, &temperature);
+			return temperature;
 		}
 
-		bool EAFProperty()
-		{
-			error = EAFGetProperty(iSelectedID, &EAFInfo);
-			if(error == EAF_SUCCESS)
-			{
-				return true;
-			} else {
-				return false;
-			}
+		bool Property() {
+			error = EAFGetProperty(selected_id, &eaf_info);
+			return (error == EAF_SUCCESS);
 		}
 
-		bool EAFMoving()
-		{
-			error = EAFIsMoving(iSelectedID, &b_moving, &b_handcontrol);
-			if(error == EAF_SUCCESS)
-			{
-				if(b_moving == true)
-				{
-					return true;
-				} else {
-					return false;
-				}
-			} else {
-				return false;
-			}
+		bool Moving() {
+			error = EAFIsMoving(selected_id, &moving, &handcontrol);
+            return error == EAF_SUCCESS && moving;
 		}
 
-		int EAFGetPose()
-		{
-			if(EAFGetPosition(iSelectedID, &pose) == EAF_SUCCESS)
-			{
-				return pose;
+		int GetPosition() {
+			if (EAFGetPosition(selected_id, &position) == EAF_SUCCESS) {
+				return position;
 			} else {
 				return -1;
 			}
 		}
 
-		void EAFSetPose(int ref_pose)
-		{
-			EAFResetPostion(iSelectedID, ref_pose);
-			pose = ref_pose;
+		void SetPosition(int ref_position) {
+			EAFResetPostion(selected_id, ref_position);
+			position = ref_position;
 		}
 
-		bool EAFGetDirection()
-		{
-			EAFGetReverse(iSelectedID, &direction);
+		bool GetDirection() {
+			EAFGetReverse(selected_id, &direction);
 			return direction;
 		}
 
-		void EAFSetDirection()
-		{
-			EAFSetReverse(iSelectedID, direction);
+		void SetDirection() {
+			EAFSetReverse(selected_id, direction);
 		}
 
-		int EAFMoveRange()
-		{
-			capture = EAFMoving();
-			if(b_moving == true)
-			{
+		int MoveRange() {
+			capture = Moving();
+			if (moving) {
 				return -1;
 			}
 
-			if(EAFStepRange(iSelectedID, &step_range) == EAF_SUCCESS)
-			{
+			if (EAFStepRange(selected_id, &step_range) == EAF_SUCCESS) {
 				return step_range;
 			} else {
 				return -1;
 			}
 		}
 
-		bool EAFMoveToPose(int target_pose) {
-
-			capture = EAFMoving();
-			if(b_moving == true)
-			{
+		bool MoveToPosition(int target_position) {
+			capture = Moving();
+			if (moving) {
 				return false;
 			}
 
-			error = EAFMove(iSelectedID, target_pose);
+			error = EAFMove(selected_id, target_position);
 			if(error == EAF_SUCCESS) {
-				b_moving = true;
+				moving = true;
 				return true;
 			}
-				return false;
+            return false;
 		}
 
-		bool EAFMoveStop() {
-			if(EAFStop(iSelectedID) == EAF_SUCCESS)
-			{
-			        return true;
-			} else {
-			        return false;
-			}
+		bool MoveStop() {
+			return (EAFStop(selected_id) == EAF_SUCCESS);
 		}
 
-		int EAFGetterBacklash()
-		{
-			EAFGetBacklash(iSelectedID, &backlash);
+		int GetterBacklash() {
+			EAFGetBacklash(selected_id, &backlash);
 			return backlash;
-
 		}
 
-		void EAFSetterBacklash()
-		{
-			EAFSetBacklash(iSelectedID, backlash);
+		void SetBacklash() {
+			EAFSetBacklash(selected_id, backlash);
 		}
 
-		bool EAFDisconnect()
-		{
-			if(EAFClose(iSelectedID) == EAF_SUCCESS)
-			{
-			        return true;
-			} else {
-			        return false;
-			}
+		bool Disconnect() {
+			return (EAFClose(selected_id) == EAF_SUCCESS);
 		}
 };
 
@@ -229,24 +178,24 @@ PYBIND11_MODULE(pybind_wrapper, handle)
 
 	py::class_<EAF_WRAPPER>(handle, "EAF")
 		.def(py::init<int, int, int, bool, bool>())
-		.def("Connect", &EAF_WRAPPER::EAFConnect)
-		.def("GetMaximalStep", &EAF_WRAPPER::EAFGetMaximalStep)
-		.def("SetMaximalStep", &EAF_WRAPPER::EAFSetMaximalStep)
-		.def("GetSound", &EAF_WRAPPER::EAFGetSound)
-		.def("SetSound", &EAF_WRAPPER::EAFSetSound)
-		.def("Temperature", &EAF_WRAPPER::EAFTemperature)
-		.def("Property", &EAF_WRAPPER::EAFProperty)
-		.def("Moving", &EAF_WRAPPER::EAFMoving)
-		.def("GetPose", &EAF_WRAPPER::EAFGetPose)
-		.def("SetPose", &EAF_WRAPPER::EAFSetPose)
-		.def("GetDirection", &EAF_WRAPPER::EAFGetDirection)
-		.def("SetDirection", &EAF_WRAPPER::EAFSetDirection)
-		.def("MoveRange", &EAF_WRAPPER::EAFMoveRange)
-		.def("MoveToPose", &EAF_WRAPPER::EAFMoveToPose)
-		.def("MoveStop", &EAF_WRAPPER::EAFMoveStop)
-		.def("GetBacklash", &EAF_WRAPPER::EAFGetterBacklash)
-		.def("SetBacklash", &EAF_WRAPPER::EAFSetterBacklash)
-		.def("Disconnect", &EAF_WRAPPER::EAFDisconnect)
+		.def("Connect", &EAF_WRAPPER::Connect)
+		.def("GetMaximalStep", &EAF_WRAPPER::GetMaximalStep)
+		.def("SetMaximalStep", &EAF_WRAPPER::SetMaximalStep)
+		.def("GetSound", &EAF_WRAPPER::GetSound)
+		.def("SetSound", &EAF_WRAPPER::SetSound)
+		.def("Temperature", &EAF_WRAPPER::Temperature)
+		.def("Property", &EAF_WRAPPER::Property)
+		.def("Moving", &EAF_WRAPPER::Moving)
+		.def("GetPosition", &EAF_WRAPPER::GetPosition)
+		.def("SetPosition", &EAF_WRAPPER::SetPosition)
+		.def("GetDirection", &EAF_WRAPPER::GetDirection)
+		.def("SetDirection", &EAF_WRAPPER::SetDirection)
+		.def("MoveRange", &EAF_WRAPPER::MoveRange)
+		.def("MoveToPosition", &EAF_WRAPPER::MoveToPosition)
+		.def("MoveStop", &EAF_WRAPPER::MoveStop)
+		.def("GetBacklash", &EAF_WRAPPER::GetterBacklash)
+		.def("SetBacklash", &EAF_WRAPPER::SetBacklash)
+		.def("Disconnect", &EAF_WRAPPER::Disconnect)
 		;
 }
 
