@@ -19,7 +19,11 @@ dev = [
     "black>=23.7.0,<24",
     "pre-commit>=3.3.3,<4",
     "flake8>=7.3.0",
+    "mypy>=1.17.1",
 ]
+
+[project.scripts]
+pyobs-zwoeaf = "pyobs_zwoeaf.cli:main"
 
 [build-system]
 requires = ["scikit-build-core>=0.11", "pybind11>=3.0"]

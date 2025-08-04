@@ -8,7 +8,7 @@ from pyobs.modules import Module
 from pyobs.utils.enums import MotionStatus
 from pyobs.utils import exceptions as exc
 
-from .pybind_wrapper import EAF  # type: ignore
+from .EAF_focuser import EAF  # type: ignore
 
 log = logging.getLogger(__name__)
 
@@ -25,7 +25,7 @@ class EAFFocuser(IFocuser, Module, metaclass=ABCMeta):
         device_number: int = 0,
         max_steps: int = 60000,
         backlash: int = 0,
-        direction: bool = True,
+        direction: bool = False,
         sound: bool = True,
         **kwargs: Any,
     ):
@@ -50,10 +50,10 @@ class EAFFocuser(IFocuser, Module, metaclass=ABCMeta):
         self.ready_changed = False
         self.step_to_mm_conversion = 0.00242105263
         self.time_limit = 60 * 5  # 5 minutes
-        self.position = 0
-        self.set_position = 0
-        self.offset = 0
-        self.eaf = None  # EAF c++ driver class object
+        self.position = 0.0
+        self.set_position = 0.0
+        self.offset = 0.0
+        self.eaf = EAF()  # EAF c++ driver class object
 
     async def open(self) -> None:
         """Open Module"""
@@ -61,30 +61,51 @@ class EAFFocuser(IFocuser, Module, metaclass=ABCMeta):
         log.info("Opening EAF focusing device!")
 
         # connect
-        self.eaf = EAF(self.device_number, self.max_steps, self.backlash, self.direction, self.sound)
-        if not self.eaf.Connect():
+        if not self.eaf.connect(self.device_number):
             raise ValueError("EAF Focusing device failed to connect.")
         self.connected = True
 
+        # set some parameters
+        self.eaf.setMaximalStep(self.max_steps)
+        self.eaf.setSound(self.sound)
+        self.eaf.setDirection(self.direction)
+        self.eaf.setBacklash(self.backlash)
+
         # get temperature and position
-        temp = self.eaf.Temperature()
-        log.info(f"The temperature of the EAF is {temp:.2f}°C")
+
+        log.info(f"The temperature of the EAF is {self.eaf.getTemperature():.2f}°C")
         self.position = self.eaf.GetPosition() * self.step_to_mm_conversion
-        self.set_position = self.position
         log.info(f"The Motor position is at: {self.position:.2f}")
 
-    async def close(self):
+    async def close(self) -> None:
+        """Close module."""
         await Module.main(self)
         log.warning("The Focuser Module was called to close! Closing USB-Connection to the EAF!")
         self.disconnect()
 
-    async def init(self, **kwargs: Any):
+    async def init(self, **kwargs: Any) -> None:
+        """Initialize device.
+
+        Raises:
+            InitError: If device could not be initialized.
+        """
         pass
 
-    async def park(self, **kwargs: Any):
+    async def park(self, **kwargs: Any) -> None:
+        """Park device.
+
+        Raises:
+            ParkError: If device could not be parked.
+        """
+
         pass
 
-    async def is_ready(self, **kwargs: Any):
+    async def is_ready(self, **kwargs: Any) -> bool:
+        """Returns the device is "ready", whatever that means for the specific device.
+
+        Returns:
+            Whether device is ready
+        """
         if self.connected:
             if not self.ready_changed:
                 log.info("EAF is connected and ready")
@@ -96,32 +117,34 @@ class EAFFocuser(IFocuser, Module, metaclass=ABCMeta):
                 self.ready_changed = False
             return False
 
-    async def _move_focus(self, focus: float):
-        if await self.is_ready():
-            step = int(focus / self.step_to_mm_conversion)
-            time_gone = 0
-            moving = self.eaf.Moving()
-            if moving:
-                log.warning("The EAF is still moving from an old command please wait.")
+    async def _move_focus(self, focus: float) -> None:
+        if not await self.is_ready():
+            return
 
-            if not moving:
-                if not self.eaf.MoveToPosition(step):
-                    self.eaf.disconnect()
-                    raise exc.MoveError(
-                        "Was not able to move the EAF motor. Tried to Disconnect the EAF device as a consequence!"
-                    )
-                else:
-                    moving = True
+        step = int(focus / self.step_to_mm_conversion)
+        time_passed = 0.0
 
-                while moving:
-                    if time_gone > self.time_limit:
-                        self.eaf.disconnect()
-                        raise InterruptedError
-                    moving = self.eaf.Moving()
-                    self.position = self.eaf.GetPosition() * self.step_to_mm_conversion
-                    log.info("EAF focusing motor is moving! Focus position: {}mm!".format(self.position))
-                    await asyncio.sleep(0.5)
-                    time_gone += 0.5
+        # if moving, stop it
+        if self.eaf.isMoving():
+            self.eaf.stop()
+
+        if not self.eaf.move(step):
+            self.disconnect()
+            raise exc.MoveError(
+                "Was not able to move the EAF motor. Tried to Disconnect the EAF device as a consequence!"
+            )
+        else:
+            moving = True
+
+        while moving:
+            if time_passed > self.time_limit:
+                self.eaf.disconnect()
+                raise InterruptedError
+            moving = self.eaf.isMoving()
+            self.position = self.eaf.getPosition() * self.step_to_mm_conversion
+            log.info("EAF focusing motor is moving! Focus position: {}mm!".format(self.position))
+            await asyncio.sleep(0.5)
+            time_passed += 0.5
 
     async def set_focus(self, focus: float, **kwargs: Any) -> None:
         """Sets new focus.
@@ -159,7 +182,7 @@ class EAFFocuser(IFocuser, Module, metaclass=ABCMeta):
             Current focus.
         """
         if await self.is_ready():
-            self.position = self.eaf.GetPosition() * self.step_to_mm_conversion
+            self.position = self.eaf.getPosition() * self.step_to_mm_conversion
         return self.position - self.offset
 
     async def get_focus_offset(self, **kwargs: Any) -> float:
@@ -180,7 +203,7 @@ class EAFFocuser(IFocuser, Module, metaclass=ABCMeta):
             A string from the Status enumerator.
         """
         if await self.is_ready():
-            if self.eaf.Moving():
+            if self.eaf.isMoving():
                 # log.info("EAF Motor is still is motion")
                 return MotionStatus.SLEWING
             else:
@@ -196,13 +219,13 @@ class EAFFocuser(IFocuser, Module, metaclass=ABCMeta):
             device: Name of device to stop, or None for all.
         """
         log.info("Stop motion of the EAF Focuser!")
-        if self.eaf.MoveStop():
+        if self.eaf.stop():
             log.info("Stopped successfully")
         else:
             log.error("Did not stop, try to figure out why! Trying to disconnect device next. Maybe restart software")
             self.disconnect()
 
-    def disconnect(self):
+    def disconnect(self) -> None:
         log.warning("Try disconnecting EAF device!")
         success = self.eaf.disconnect()
         if success is True:
