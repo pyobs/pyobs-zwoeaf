@@ -74,7 +74,7 @@ class EAFFocuser(IFocuser, Module, metaclass=ABCMeta):
         # get temperature and position
 
         log.info(f"The temperature of the EAF is {self.eaf.getTemperature():.2f}°C")
-        self.position = self.eaf.GetPosition() * self.step_to_mm_conversion
+        self.position = self.eaf.getPosition() * self.step_to_mm_conversion
         log.info(f"The Motor position is at: {self.position:.2f}")
 
     async def close(self) -> None:
