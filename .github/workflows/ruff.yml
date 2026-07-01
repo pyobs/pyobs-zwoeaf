@@ -23,4 +23,4 @@ jobs:
         run: uv sync --all-extras --dev
 
       - name: Run ruff
-        run: uv run ruff check src/pyobs_zwoeaf/
+        run: uv run --no-sync ruff check src/pyobs_zwoeaf/
