@@ -1,39 +1,25 @@
 import asyncio
-from abc import ABCMeta
-from typing import Any, Optional
 import logging
+from typing import Any
 
-from pyobs.interfaces import IFocuser
+import pyobs.utils.exceptions as exc
+from pyobs.interfaces import IFocuser, IReady, ITemperatures
+from pyobs.interfaces.IFocuser import FocuserState
+from pyobs.interfaces.IReady import ReadyState
+from pyobs.interfaces.ITemperatures import SensorReading, TemperaturesState
+from pyobs.mixins import MotionStatusMixin
 from pyobs.modules import Module
 from pyobs.utils.enums import MotionStatus
-from pyobs.utils import exceptions as exc
-
-from .pybind_wrapper import EAF
 
 log = logging.getLogger(__name__)
 
+_STEP_TO_MM = 0.00242105263
 
-class EAFFocuser(IFocuser, Module, metaclass=ABCMeta):
-    """
-    This is the pyobs software python class for the EAF := Electronic Automatic Focuser from ZWO for the 8 inch Monti telescope!
-    """
 
-    device_number = 0  # number of the device slot
-    max_steps = 60000  # number of the maximal steps
-    backlash = 0  # number of backlash steps
-    direction = True  # direction false/true -> right/left-rotation
-    sound = True  # sound false/true -> off/on sound when initating motion of the motor
+class EAFFocuser(Module, MotionStatusMixin, IFocuser, ITemperatures):
+    """A pyobs module for the ZWO EAF electronic auto focuser."""
 
-    connected = False
-    ready_changed = False
-    step_to_mm_conversion = 0.00242105263
-    time_limit = 60 * 5  # 5 minutes
-    pose = 0
-    set_pose = 0
-    offset = 0
-    eaf = None  # EAF c++ driver class object
-
-    __module__ = "pyobs.modules.focuser"
+    __module__ = "pyobs_zwoeaf"
 
     def __init__(
         self,
@@ -43,207 +29,120 @@ class EAFFocuser(IFocuser, Module, metaclass=ABCMeta):
         direction: bool = True,
         sound: bool = True,
         **kwargs: Any,
-    ):
-        """
-        Initiate EAF Focus device class!
-        Give the following parameter:
-            - device_number = 0       # number of the device USB slot, should be zero if not a second EAF is connected or similiar HID USB device ...
-            - max_steps = 60000       # number of the maximal steps
-            - backlash = 0            # number of backlash steps
-            - direction = True        # direction false/true -> right/left-rotation
-            - sound = True            # sound false/true -> off/on sound when initating motion of the motor
-        """
+    ) -> None:
         Module.__init__(self, **kwargs)
-        self.device_number = device_number
-        self.max_steps = max_steps
-        self.backlash = backlash
-        self.direction = direction
-        self.sound = sound
+        MotionStatusMixin.__init__(self)
+
+        self._device_number = device_number
+        self._max_steps = max_steps
+        self._backlash = backlash
+        self._direction = direction
+        self._sound = sound
+        self._eaf: Any | None = None
+        self._focus_setpoint = 0.0
+        self._focus_offset = 0.0
+
+        self.add_background_task(self._poll_temperature)
 
     async def open(self) -> None:
-        """
-        Open Module
-        """
-        log.info("Opening EAF focusing device!")
+        """Open module."""
         await Module.open(self)
-        self.eaf = EAF(self.device_number, self.max_steps, self.backlash, self.direction, self.sound)
-        success = self.eaf.Connect()
-        if success is False:
-            raise ValueError(
-                "EAF Focusing device failed to connect, exit program! Is the device connected vis USB? Permission for using the USB port? device_number available?"
-            )
-        self.connected = True
-        temp = self.eaf.Temperature()
-        log.info("The temperature of the EAF is {}".format(temp))
-        self.pose = self.eaf.GetPose() * self.step_to_mm_conversion
-        self.set_pose = self.pose
-        log.info("The Motor position is at: {}".format(self.pose))
-        task = asyncio.create_task(self.close())
 
-    async def close(self):
-        await Module.main(self)
-        log.warning("The Focuser Module was called to close! Closing USB-Connection to the EAF!")
-        self.Disconnect()
+        from .EAF_focuser import EAF  # type: ignore[import-untyped]
 
-    async def init(self, **kwargs: Any):
-        """
-        Initializer for the EAF Motor.
-        Needs to be called before accessing the other EAF focuser functions.
-        Will initialize with the values given in the constructor!
-        """
-        if await self.is_ready() is False:
-            self.eaf = EAF(self.device_number, self.max_steps, self.backlash, self.direction, self.sound)
-            success = self.eaf.Connect()
-            if success is False:
-                sys.exit(
-                    "EAF Focusing device failed to connect, exit program! Is the device connected vis USB? Permission for using the USB port? device_number available?"
-                )
-            temp = self.eaf.Temperature()
-            log.info("The temperature of the EAF is {}".format(temp))
-            self.pose = self.eaf.GetPose() * self.step_to_mm_conversion
-            log.info("The Motor position is at: {}".format(self.pose))
-        else:
-            log.warning("No need no initialize, EAF is already Connected!")
+        self._eaf = EAF()
+        if not self._eaf.connect(self._device_number):
+            raise ValueError("EAF focuser failed to connect. Is the device connected via USB? Correct device_number?")
 
-    async def park(self, **kwargs: Any):
-        log.info("Going park at position zero!")
+        self._eaf.setMaximalStep(self._max_steps)
+        self._eaf.setBacklash(self._backlash)
+        self._eaf.setDirection(self._direction)
+        self._eaf.setSound(self._sound)
+
+        log.info("Connected to EAF focuser, temperature: %.2f°C", self._eaf.getTemperature())
+
+        await MotionStatusMixin.open(self)
+        await self._change_motion_status(MotionStatus.IDLE)
+
+        self._focus_setpoint = self._eaf.getPosition() * _STEP_TO_MM
+        await self.comm.set_state(IFocuser, FocuserState(focus=self._focus_setpoint, focus_offset=self._focus_offset))
+        await self.comm.set_state(IReady, ReadyState(ready=True))
+
+    async def close(self) -> None:
+        """Close module."""
+        if self._eaf is not None:
+            self._eaf.disconnect()
+            self._eaf = None
+        await Module.close(self)
+
+    async def init(self, **kwargs: Any) -> None:
+        pass
+
+    async def park(self, **kwargs: Any) -> None:
+        """Park focuser at position zero."""
         await self.stop_motion()
-        await asyncio.sleep(0.1)
-        await self.set_focus(0)
-        self.Disconnect()
+        await self.set_focus(0.0)
 
-    async def is_ready(self, **kwargs: Any):
-        if self.connected is True:
-            if self.ready_changed is False:
-                log.info("EAF is connected and ready")
-                self.ready_changed = True
-            return True
-        else:
-            if self.ready_changed is True:
-                log.info("EAF is not connected and not ready!")
-                self.ready_changed = False
-            return False
+    async def stop_motion(self, device: str | None = None, **kwargs: Any) -> None:
+        """Stop focuser motion."""
+        if self._eaf is not None:
+            self._eaf.stop()
+        await self._change_motion_status(MotionStatus.IDLE)
 
-    async def set_focus(
-        self, focus: float, direction: bool = True, reset: bool = False, do_offset: bool = False, **kwargs: Any
-    ) -> None:
-        """
-        - focus: Moves EAF motor to new value in the range [0, max_steps].
-        - direction: Changes the direction the EAF motor moves, false/true -> right/left-rotation ...
-        - reset: If reset is set True, the new focus value replaces the current value, without moving the EAF motor!
+    async def set_focus(self, focus: float, **kwargs: Any) -> None:
+        """Move focuser to given position.
+
+        Args:
+            focus: New focus position in mm.
 
         Raises:
             MoveError: If focuser cannot be moved.
-            InterruptedError: If movement was aborted.
         """
-        if await self.is_ready() is True:
-            if do_offset is False:
-                self.set_pose = focus
-            step = int(focus / self.step_to_mm_conversion)
-            time_gone = 0
-            moving = self.eaf.Moving()
-            if moving is True:
-                log.warning("The EAF is still moving from an old command please wait.")
+        if self._eaf is None:
+            raise ValueError("Not connected.")
 
-            if reset is False and moving is False:
-                success = self.eaf.MoveToPose(step)
-                if success is False:
-                    self.eaf.Disconnect()
-                    raise exc.MoveError(
-                        "Was not able to move the EAF motor. Tried to Disconnect the EAF device as a consequence!"
-                    )
-                else:
-                    moving = True
+        total_mm = focus + self._focus_offset
+        step = int(total_mm / _STEP_TO_MM)
+        log.info("Moving EAF to %.4f mm (offset %.4f mm, step %d)...", focus, self._focus_offset, step)
 
-                while moving is True:
-                    if time_gone > self.time_limit:
-                        self.eaf.Disconnect()
-                        raise InterruptedError
-                    moving = self.eaf.Moving()
-                    self.pose = self.eaf.GetPose() * self.step_to_mm_conversion
-                    log.info("EAF focusing motor is moving! Focus pose: {}mm!".format(self.pose))
-                    await asyncio.sleep(0.5)
-                    time_gone += 0.5
+        await self._change_motion_status(MotionStatus.SLEWING)
+        if not self._eaf.move(step):
+            await self._change_motion_status(MotionStatus.ERROR)
+            raise exc.MoveError("Could not move EAF motor.")
 
-        elif reset is True and moving is False:
-            self.eaf.SetPose(step)
-            self.pose = step
+        while self._eaf.isMoving():
+            await asyncio.sleep(0.5)
+
+        self._focus_setpoint = focus
+        await self._change_motion_status(MotionStatus.POSITIONED)
+        await self.comm.set_state(IFocuser, FocuserState(focus=self._focus_setpoint, focus_offset=self._focus_offset))
 
     async def set_focus_offset(self, offset: float, **kwargs: Any) -> None:
-        """Sets focus offset.
+        """Set focus offset and re-apply.
 
         Args:
-            offset: New focus offset.
+            offset: New focus offset in mm.
 
         Raises:
-            ValueError: If given value is invalid.
             MoveError: If focuser cannot be moved.
         """
-        if await self.is_ready() is True:
-            self.offset = offset
-            log.info("Setting offset: {}".format(self.offset))
-            await self.set_focus(self.set_pose + offset, do_offset=True)
+        log.info("Setting focus offset to %.4f mm.", offset)
+        self._focus_offset = offset
+        await self.set_focus(self._focus_setpoint)
 
-    async def get_focus(self, **kwargs: Any) -> float:
-        """
-        Return current focus.
-        Returns:
-            Current focus.
-        """
-        if await self.is_ready() is True:
-            self.pose = self.eaf.GetPose() * self.step_to_mm_conversion
-            self.set_pose = self.pose - self.offset
-        return self.set_pose
-
-    async def get_focus_offset(self, **kwargs: Any) -> float:
-        """
-        Return current focus offset.
-        Returns:
-            Current focus offset.
-        """
-        return self.offset
-
-    async def get_motion_status(self, device: Optional[str] = None, **kwargs: Any) -> MotionStatus:
-        """Returns current motion status.
-
-        Args:
-            device: Name of device to get status for, or None.
-
-        Returns:
-            A string from the Status enumerator.
-        """
-        if await self.is_ready() is True:
-            moving = self.eaf.Moving()
-            if moving is True:
-                # log.info("EAF Motor is still is motion")
-                return MotionStatus.SLEWING
-            else:
-                # log.info("EAF Motor is not moving or not connected properly")
-                return MotionStatus.IDLE
-        else:
-            return MotionStatus.INITIALIZING
-
-    async def stop_motion(self, device: Optional[str] = None, **kwargs: Any) -> None:
-        """Stop the motion.
-
-        Args:
-            device: Name of device to stop, or None for all.
-        """
-        log.info("Stop motion of the EAF Focuser!")
-        success = self.eaf.MoveStop()
-        if success is True:
-            log.info("Stopped successfully")
-        else:
-            log.error("Did not stop, try to figure out why! Trying to disconnect device next. Maybe restart software")
-            self.Disconnect()
-
-    def Disconnect(self):
-        log.warning("Try disconnecting EAF device!")
-        success = self.eaf.Disconnect()
-        if success is True:
-            log.warning("Disconnected successfully!")
-        else:
-            log.error("Did not disconnect properly")
+    async def _poll_temperature(self) -> None:
+        """Background task: periodically reads EAF temperature."""
+        while True:
+            try:
+                if self._eaf is not None:
+                    temp = self._eaf.getTemperature()
+                    await self.comm.set_state(
+                        ITemperatures,
+                        TemperaturesState(readings=[SensorReading(name="EAF", value=temp)]),
+                    )
+            except Exception:
+                pass
+            await asyncio.sleep(10)
 
 
 __all__ = ["EAFFocuser"]

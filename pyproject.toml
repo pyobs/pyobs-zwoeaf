@@ -1,6 +1,6 @@
 [project]
 name = "pyobs-zwoeaf"
-version = "1.0.0"
+version = "2.0.0.dev1"
 description = "pyobs model for ZWO EAF focus motors"
 authors = [
     { name = "Lennart Jonas Buhrke", email = "l.buhrke@stud.uni-goettingen.de" },
@@ -9,22 +9,32 @@ authors = [
 requires-python = ">=3.11,<3.14"
 license = "MIT"
 dependencies = [
-    "astropy>=7.0.1,<8",
-    "numpy>=2.2.5,<3",
-    "pyobs-core>=1,<2",
+    "pyobs-core>=2.0.0.dev6,<3",
 ]
 
 [dependency-groups]
 dev = [
-    "black>=23.7.0,<24",
     "pre-commit>=3.3.3,<4",
-    "flake8>=7.3.0",
+    "pyrefly>=0.16",
+    "ruff>=0.9.0",
 ]
+
+[project.scripts]
+pyobs-zwoeaf = "pyobs_zwoeaf.cli:main"
 
 [build-system]
 requires = ["scikit-build-core>=0.11", "pybind11>=3.0"]
 build-backend = "scikit_build_core.build"
 
-[tool.black]
+[tool.scikit-build]
+wheel.packages = ["src/pyobs_zwoeaf"]
+
+[tool.ruff]
+target-version = "py311"
 line-length = 120
-target-version = ['py311']
+
+[tool.ruff.lint]
+select = ["E", "F", "W", "I", "UP", "G"]
+
+[tool.pyrefly]
+python-version = "3.11"

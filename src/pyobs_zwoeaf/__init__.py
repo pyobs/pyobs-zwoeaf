@@ -1,6 +1,1 @@
-"""
-TODO: write doc
-"""
-__title__ = "ZWO modules"
-
-from .eaffocuser import EAFFocuser
+from .eaffocuser import EAFFocuser as EAFFocuser
