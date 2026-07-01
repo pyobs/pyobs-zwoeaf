@@ -17,11 +17,8 @@ jobs:
           enable-cache: true
           python-version: "3.11"
 
-      - name: Install system dependencies
-        run: sudo apt-get install -y libudev-dev
-
       - name: Build
-        run: uv build
+        run: uv build --sdist
 
       - name: Publish
         env:
