@@ -16,8 +16,11 @@ jobs:
           enable-cache: true
           python-version: "3.13"
 
+      - name: Install system dependencies
+        run: sudo apt-get install -y libudev-dev
+
       - name: Install packages
         run: uv sync --all-extras --dev
 
       - name: Run ruff
-        run: uv run ruff check pyobs_gui/
+        run: uv run ruff check src/pyobs_zwoeaf/
