@@ -20,14 +20,14 @@ def menu(eaf: EAF) -> bool:
     print(f"Step range:       {eaf.getStepRange()}")
     print(f"Is moving:        {eaf.isMoving()}")
     print(f"Position:         {eaf.getPosition()}")
-    print(f"(1) Move")
-    print(f"(2) Stop")
-    print(f"(3) Set current position")
+    print("(1) Move")
+    print("(2) Stop")
+    print("(3) Set current position")
     print(f"(4) Maximal step: {eaf.getMaximalStep()}")
     print(f"(5) Sound:        {eaf.getSound()}")
     print(f"(6) Direction     {eaf.getDirection()}")
     print(f"(7) Backlash      {eaf.getBacklash()}")
-    print(f"(0) Quit")
+    print("(0) Quit")
 
     while True:
         cmd = input("Enter command [0-7]: ")
