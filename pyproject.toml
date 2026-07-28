@@ -9,7 +9,7 @@ authors = [
 requires-python = ">=3.11,<3.14"
 license = "MIT"
 dependencies = [
-    "pyobs-core>=2.0.0.dev6,<3",
+    "pyobs-core>=2.0.0.dev48,<3",
 ]
 
 [dependency-groups]
