@@ -6,7 +6,7 @@ authors = [
     { name = "Lennart Jonas Buhrke", email = "l.buhrke@stud.uni-goettingen.de" },
     { name = "Tim-Oliver Husser", email = "thusser@uni-goettingen.de" },
 ]
-requires-python = ">=3.11,<3.14"
+requires-python = ">=3.11"
 license = "MIT"
 dependencies = [
     "pyobs-core>=2.0.0.dev48,<3",
