@@ -9,9 +9,26 @@ import threading
 from unittest.mock import AsyncMock, MagicMock
 
 import pytest
+from pyobs.utils.enums import MotionStatus
 
 from pyobs_zwoeaf import EAFFocuser
 from pyobs_zwoeaf.eaffocuser import _STEP_TO_MM
+
+
+def test_constructor_threads_kwargs_cooperatively() -> None:
+    """Locks in the cooperative-super()-chain conversion: EAFFocuser(Module, MotionStatusMixin,
+    ...) used to call Module.__init__() then a separate, redundant MotionStatusMixin.__init__(self)
+    with no kwargs. Bases were already correctly ordered (MotionStatusMixin right after Module),
+    so Module's own cooperative chain already reached MotionStatusMixin on the *first* call --
+    this held true even pre-fix, confirmed by constructing with these same kwargs against both
+    versions (via git stash). The redundant second call was genuinely a no-op here, not a latent
+    crash; this test locks in the cleaned-up single-call behavior."""
+    focuser = EAFFocuser(
+        device_number=0,
+        comm={"class": "pyobs.comm.dummy.DummyComm"},
+        motion_status_interfaces=["IFocuser"],
+    )
+    assert focuser.motion_status() == MotionStatus.UNKNOWN
 
 
 def test_constructor_defaults() -> None:
