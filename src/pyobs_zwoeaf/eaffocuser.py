@@ -42,8 +42,7 @@ class EAFFocuser(Module, MotionStatusMixin, IFocuser, ITemperatures):
         sound: bool = True,
         **kwargs: Any,
     ) -> None:
-        Module.__init__(self, **kwargs)
-        MotionStatusMixin.__init__(self)
+        super().__init__(**kwargs)
 
         self._device_number = device_number
         self._max_steps = max_steps
