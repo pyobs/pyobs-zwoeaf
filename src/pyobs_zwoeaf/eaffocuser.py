@@ -6,11 +6,17 @@ from collections.abc import Callable
 from typing import Any
 
 import pyobs.utils.exceptions as exc
-from pyobs.interfaces import IFocuser, IReady, ITemperatures
+from pyobs.interfaces import (
+    FitsHeaderEntry,
+    IFitsHeaderBefore,
+    IFocuser,
+    IReady,
+    ITemperatures,
+)
 from pyobs.interfaces.IFocuser import FocuserState
 from pyobs.interfaces.IReady import ReadyState
 from pyobs.interfaces.ITemperatures import SensorReading, TemperaturesState
-from pyobs.mixins import MotionStatusMixin
+from pyobs.mixins import FocuserHeaderMixin, MotionStatusMixin
 from pyobs.modules import Module
 from pyobs.utils.enums import MotionStatus
 
@@ -28,7 +34,14 @@ _SDK_CALL_TIMEOUT = 5.0
 _MOVE_TIMEOUT = 60.0
 
 
-class EAFFocuser(Module, MotionStatusMixin, IFocuser, ITemperatures):
+class EAFFocuser(
+    FocuserHeaderMixin,
+    Module,
+    MotionStatusMixin,
+    IFocuser,
+    ITemperatures,
+    IFitsHeaderBefore,
+):
     """A pyobs module for the ZWO EAF electronic auto focuser."""
 
     __module__ = "pyobs_zwoeaf"
@@ -52,6 +65,7 @@ class EAFFocuser(Module, MotionStatusMixin, IFocuser, ITemperatures):
         self._eaf: Any | None = None
         self._focus_setpoint = 0.0
         self._focus_offset = 0.0
+        self._temperature: float | None = None
 
         self.add_background_task(self._poll_temperature)
 
@@ -231,6 +245,7 @@ class EAFFocuser(Module, MotionStatusMixin, IFocuser, ITemperatures):
                         result.append(eaf.getTemperature())
 
                     if await self._run_blocking(_get_temp):
+                        self._temperature = result[0]
                         await self.comm.set_state(
                             ITemperatures,
                             TemperaturesState(
@@ -240,6 +255,19 @@ class EAFFocuser(Module, MotionStatusMixin, IFocuser, ITemperatures):
             except Exception:
                 pass
             await asyncio.sleep(10)
+
+    async def get_fits_header_before(
+        self, namespaces: list[str] | None = None, **kwargs: Any
+    ) -> dict[str, FitsHeaderEntry]:
+        """Returns FITS header for the current status of this module."""
+        hdr = await super().get_fits_header_before(namespaces, **kwargs)
+
+        hdr["FOC-TEMP"] = FitsHeaderEntry(self._temperature, "Focuser temperature [C]")
+        hdr["FOC-BLSH"] = FitsHeaderEntry(
+            self._backlash, "Focuser backlash compensation [steps]"
+        )
+
+        return hdr
 
 
 __all__ = ["EAFFocuser"]

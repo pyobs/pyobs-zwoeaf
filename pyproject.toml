@@ -1,6 +1,6 @@
 [project]
 name = "pyobs-zwoeaf"
-version = "2.0.2"
+version = "2.0.3"
 description = "pyobs model for ZWO EAF focus motors"
 authors = [
     { name = "Lennart Jonas Buhrke", email = "l.buhrke@stud.uni-goettingen.de" },
@@ -9,7 +9,7 @@ authors = [
 requires-python = ">=3.11"
 license = "MIT"
 dependencies = [
-    "pyobs-core>=2.2.0,<3",
+    "pyobs-core>=2.6.1,<3",
 ]
 
 [dependency-groups]
